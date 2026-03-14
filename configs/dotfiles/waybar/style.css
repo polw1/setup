@@ -1,0 +1,73 @@
+/* Waybar — tema escuro simples */
+
+* {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    border: none;
+    border-radius: 0;
+    min-height: 0;
+}
+
+window#waybar {
+    background-color: #282a36;
+    color: #f8f8f2;
+}
+
+#workspaces {
+    margin: 4px 0 4px 6px;
+    padding: 0 4px;
+    background: #1f2330;
+    border-radius: 10px;
+}
+
+#workspaces button {
+    min-width: 24px;
+    padding: 0 6px;
+    margin: 4px 2px;
+    color: #f8f8f2;
+    background: transparent;
+    border-radius: 8px;
+}
+
+#workspaces button.focused {
+    background: #6272a4;
+    color: #f8f8f2;
+}
+
+#workspaces button:not(.empty):not(.focused):not(.urgent) {
+    color: #f1fa8c;
+}
+
+#workspaces button.urgent {
+    background: #ff5555;
+}
+
+#clock,
+#cpu,
+#memory,
+#battery,
+#network,
+#pulseaudio,
+#tray {
+    padding: 0 10px;
+}
+
+#sway-mode {
+    padding-left: 4px;
+}
+
+#battery.warning {
+    color: #f1fa8c;
+}
+
+#battery.critical {
+    color: #ff5555;
+}
+
+#network.disconnected {
+    color: #ff5555;
+}
+
+#pulseaudio.muted {
+    color: #6272a4;
+}

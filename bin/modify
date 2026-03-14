@@ -1,0 +1,416 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Uso: ./modify_any.sh caminho/para/arquivo.md
+if [[ $# -lt 1 ]]; then
+  echo "Uso: $0 <arquivo_markdown>"
+  exit 1
+fi
+
+TARGET_FILE="$1"
+
+resolve_command() {
+  local env_value="$1"
+  shift
+
+  if [[ -n "$env_value" ]]; then
+    printf '%s\n' "$env_value"
+    return 0
+  fi
+
+  local candidate
+  for candidate in "$@"; do
+    if [[ -n "$candidate" ]] && command -v "$candidate" >/dev/null 2>&1; then
+      command -v "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+resolve_python() {
+  local env_value="${PYTHON:-}"
+  if [[ -n "$env_value" ]]; then
+    printf '%s\n' "$env_value"
+    return 0
+  fi
+
+  resolve_command "" python3 python && return 0
+
+  if command -v pyenv >/dev/null 2>&1; then
+    pyenv which python 2>/dev/null && return 0
+  fi
+
+  return 1
+}
+
+resolve_cargo() {
+  local env_value="${CARGO_BIN:-}"
+  if [[ -n "$env_value" ]]; then
+    printf '%s\n' "$env_value"
+    return 0
+  fi
+
+  resolve_command "" cargo && return 0
+
+  if command -v rustup >/dev/null 2>&1; then
+    local cargo_home="${CARGO_HOME:-$HOME/.cargo}/bin/cargo"
+    if [[ -x "$cargo_home" ]]; then
+      printf '%s\n' "$cargo_home"
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
+require_command() {
+  local label="$1"
+  local value="$2"
+  if [[ -z "$value" ]]; then
+    printf 'Erro: nao foi possivel localizar o executavel para %s.\n' "$label" >&2
+    exit 127
+  fi
+}
+
+PYTHON="$(resolve_python || true)"
+ZSH_BIN="$(resolve_command "${ZSH_BIN:-}" zsh /usr/bin/zsh || true)"
+CARGO_BIN="$(resolve_cargo || true)"
+JAVA_BIN="$(resolve_command "${JAVA_BIN:-}" java || true)"
+INOTIFYWAIT_BIN="$(resolve_command "${INOTIFYWAIT_BIN:-}" inotifywait || true)"
+EOG_BIN="$(resolve_command "${EOG_BIN:-}" eog || true)"
+
+require_command "python" "$PYTHON"
+require_command "zsh" "$ZSH_BIN"
+
+GLOBAL_TMP_DIR="${TMPDIR:-/tmp}"
+cleanup_global() { sudo rm -rf "$GLOBAL_TMP_DIR"/tmp.* >/dev/null 2>&1 || true; }
+trap cleanup_global EXIT
+
+# Caminho do log ao lado do arquivo .md
+LOG_FILE="$(dirname "$TARGET_FILE")/$(basename "$TARGET_FILE").log"
+
+print_separator() {
+  local cols
+  cols="${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
+  printf '%*s\n' "$cols" '' | tr ' ' '-'
+}
+
+append_log() {
+  # args: lang, code_path, out_path, err_path, status
+  local _lang="$1" _code="$2" _out="$3" _err="$4" _status="$5"
+  local _ts
+  _ts="$(date -Iseconds)"
+  {
+    printf '%s\n' "----- ${_ts} | ${_lang} | exit=${_status} -----"
+    printf 'INPUT:\n'
+    cat "${_code}" 2>/dev/null || true
+    printf '\nOUTPUT:\n'
+    cat "${_out}" 2>/dev/null || true
+    printf '\nERROR:\n'
+    cat "${_err}" 2>/dev/null || true
+    printf '\n\n'
+  } >> "${LOG_FILE}"
+}
+
+extract_block_and_lang() {
+  # args: none, uses TARGET_FILE and /tmp/current_line.txt
+  if [[ ! -f /tmp/current_line.txt ]]; then
+    return 1
+  fi
+  local current_line
+  current_line="$(cat /tmp/current_line.txt || true)"
+  [[ "$current_line" =~ ^[0-9]+$ ]] || return 1
+
+  # Encontrar a última cerca ``` antes (ou na) linha atual e capturar a linguagem
+  local meta start_line lang end_line
+  meta="$(awk -v line="$current_line" '
+    NR <= line && /^```/ {
+      lang="";
+      if (match($0, /^```[[:space:]]*([A-Za-z0-9_+-]+)/, m)) lang=m[1];
+      start=NR; startlang=lang;
+    }
+    END { if (start>0) printf "%d %s\n", start, startlang; }
+  ' "$TARGET_FILE")"
+  start_line="${meta%% *}"
+  lang="${meta#* }"
+  if [[ -z "${start_line:-}" || "${start_line}" -le 0 ]]; then
+    return 2
+  fi
+
+  end_line="$(awk -v start="$start_line" 'NR > start && /^```[[:space:]]*$/ {print NR; exit}' "$TARGET_FILE")"
+  if [[ -z "${end_line:-}" || "$end_line" -le 0 ]]; then
+    return 3
+  fi
+
+  printf '%s\n' "$start_line" "$end_line" "$lang"
+  return 0
+}
+
+run_python_block() {
+  local start_line="$1" end_line="$2"
+  (
+    tmp_py="$(mktemp --suffix=.py)"
+    out_file="$(mktemp)"
+    err_file="$(mktemp)"
+    cleanup_py() { rm -f "$tmp_py" "$out_file" "$err_file"; }
+    trap cleanup_py EXIT
+
+    sed -n "${start_line},${end_line}p" "$TARGET_FILE" | sed '1d;$d' > "$tmp_py"
+
+    {
+      printf '%s\n' \
+        'import builtins as _bi' \
+        'import os as _os, importlib.util as _iu, sys as _sys' \
+        'try:' \
+        '    _sv = _os.path.join(_os.getcwd(), "saved_variables.py")' \
+        '    if _os.path.exists(_sv):' \
+        '        _spec = _iu.spec_from_file_location("saved_variables", _sv)' \
+        '        _mod = _iu.module_from_spec(_spec)' \
+        '        _spec.loader.exec_module(_mod)' \
+        '        for _name in dir(_mod):' \
+        '            if not _name.startswith("_"):' \
+        '                globals()[_name] = getattr(_mod, _name)' \
+        'except Exception:' \
+        '    pass'
+      cat "$tmp_py"
+    } > "${tmp_py}.withload" && mv "${tmp_py}.withload" "$tmp_py"
+
+    cat >> "$tmp_py" <<'PY'
+import builtins as _bi
+import types as _types
+from typing import Any
+
+def _is_persistable(value: Any, depth: int = 0) -> bool:
+    if depth > 3:
+        return False
+    basic = (int, float, bool, str, type(None))
+    if isinstance(value, basic):
+        return True
+    if isinstance(value, (list, tuple, set)):
+        try:
+            return all(_is_persistable(v, depth + 1) for v in value)
+        except Exception:
+            return False
+    if isinstance(value, dict):
+        try:
+            return all(isinstance(k, (str, int, float, bool)) and _is_persistable(v, depth + 1) for k, v in value.items())
+        except Exception:
+            return False
+    return False
+
+_excluded_names = {"__name__", "__file__", "__package__", "__spec__", "__loader__", "__builtins__", "_bi"}
+
+module_lines = []
+assign_lines = []
+_seen_import_targets = set()
+
+for var, value in list(_bi.globals().items()):
+    if var in _excluded_names:
+        continue
+    if var.startswith("_"):
+        continue
+    if callable(value):
+        continue
+    try:
+        if isinstance(value, _types.ModuleType):
+            modname = getattr(value, "__name__", None)
+            if modname:
+                target = modname
+                if target not in _seen_import_targets:
+                    _seen_import_targets.add(target)
+                    if var == target or var == target.split(".")[-1]:
+                        module_lines.append(f"import {target}")
+                    else:
+                        module_lines.append(f"import {target} as {var}")
+            continue
+        if _is_persistable(value):
+            assign_lines.append(f"{var} = {repr(value)}")
+    except Exception:
+        pass
+
+with open("saved_variables.py", "w") as f:
+    f.write("# Auto-generated by modify_any.sh\n")
+    for line in module_lines:
+        f.write(line + "\n")
+    for line in assign_lines:
+        f.write(line + "\n")
+PY
+
+    if "$PYTHON" "$tmp_py" > >(tee "$out_file") 2> >(tee "$err_file" >&2); then
+      status=0
+    else
+      status=$?
+    fi
+    append_log "python" "$tmp_py" "$out_file" "$err_file" "$status"
+  )
+}
+
+run_zsh_block() {
+  local start_line="$1" end_line="$2"
+  (
+    tmp_sh="$(mktemp --suffix=.zsh)"
+    out_file="$(mktemp)"
+    err_file="$(mktemp)"
+    trap 'rm -f "$tmp_sh" "$out_file" "$err_file"' EXIT
+    sed -n "${start_line},${end_line}p" "$TARGET_FILE" | sed '1d;$d' > "$tmp_sh"
+    if "$ZSH_BIN" "$tmp_sh" > >(tee "$out_file") 2> >(tee "$err_file" >&2); then
+      status=0
+    else
+      status=$?
+    fi
+    append_log "zsh" "$tmp_sh" "$out_file" "$err_file" "$status"
+  )
+}
+
+run_rust_block() {
+  local start_line="$1" end_line="$2"
+  require_command "cargo" "$CARGO_BIN"
+  (
+    tmp_src="$(mktemp --suffix=.rs)"
+    tmp_dir=""
+    dep_file=""
+    out_file="$(mktemp)"
+    err_file="$(mktemp)"
+    cleanup_all() { rm -f "$tmp_src" ${dep_file:+"$dep_file"} "$out_file" "$err_file"; if [[ -n "${tmp_dir:-}" ]]; then rm -rf "$tmp_dir"; fi; }
+    trap cleanup_all EXIT
+
+    sed -n "${start_line},${end_line}p" "$TARGET_FILE" | sed '1d;$d' > "$tmp_src"
+
+    # Se bloco iniciar com [dependencies], extrair dependências até linha em branco e remover do código
+    first_non_empty="$(awk 'NF{print NR; exit}' "$tmp_src" || true)"
+    if [[ -n "${first_non_empty:-}" ]]; then
+      header_line="$(sed -n "${first_non_empty}p" "$tmp_src" | tr -d '\r')"
+      if [[ "$header_line" == "[dependencies]" ]]; then
+        dep_file="$(mktemp)"
+        dep_start=$((first_non_empty+1))
+        awk -v s="$dep_start" 'NR>=s{ if ($0 ~ /^\s*$/){ exit } else print }' "$tmp_src" > "$dep_file"
+        # Determinar início do código (linha após a primeira linha em branco seguinte)
+        code_start="$(awk -v s="$dep_start" 'NR>=s{ if ($0 ~ /^\s*$/){ print NR+1; exit }} END{print NR+1}' "$tmp_src" | head -n1)"
+        total_lines="$(wc -l < "$tmp_src" | tr -d ' ')"
+        if [[ "$code_start" -le "$total_lines" ]]; then
+          sed -n "${code_start},${total_lines}p" "$tmp_src" > "${tmp_src}.code" && mv "${tmp_src}.code" "$tmp_src"
+        else
+          printf '%s\n' '' > "$tmp_src"
+        fi
+      fi
+    fi
+
+    if ! grep -qE '^\s*fn\s+main\s*\(' "$tmp_src"; then
+      {
+        printf '%s\n' '#![allow(unused)]'
+        #printf '%s\n' 'fn main() {'
+        sed 's/^/    /' "$tmp_src"
+        #printf '%s\n' '}'
+      } > "${tmp_src}.wrapped" && mv "${tmp_src}.wrapped" "$tmp_src"
+    fi
+
+    tmp_dir="$(mktemp -d)"
+    (cd "$tmp_dir" && "$CARGO_BIN" init --bin --name temp_runner --vcs none >/dev/null 2>&1)
+
+    if [[ -n "${dep_file:-}" && -s "$dep_file" ]]; then
+      cat "$dep_file" >> "$tmp_dir/Cargo.toml"
+    fi
+
+    mkdir -p "$tmp_dir/src"
+    cp "$tmp_src" "$tmp_dir/src/main.rs"
+
+    if (cd "$tmp_dir" && "$CARGO_BIN" run --quiet > >(tee "$out_file") 2> >(tee "$err_file" >&2)); then
+      status=0
+    else
+      status=$?
+    fi
+    append_log "rust" "$tmp_src" "$out_file" "$err_file" "$status"
+  )
+}
+
+run_plantuml_block() {
+  local start_line="$1" end_line="$2"
+  require_command "java" "$JAVA_BIN"
+  tmp_src="$(mktemp --suffix=.puml)"
+  out_file="$(mktemp)"
+  err_file="$(mktemp)"
+  trap 'rm -f "$tmp_src" "$out_file" "$err_file"' EXIT
+
+  # Extrai o conteúdo do bloco e remove as linhas ``` do início e fim
+  sed -n "${start_line},${end_line}p" "$TARGET_FILE" | sed '1d;$d' > "$tmp_src"
+
+  # Executa o PlantUML
+  if "$JAVA_BIN" -jar /usr/share/plantuml/plantuml.jar "$tmp_src" > >(tee "$out_file") 2> >(tee "$err_file" >&2); then
+    status=0
+  else
+    status=$?
+  fi
+
+  # Abre a imagem gerada
+  img_file="${tmp_src%.puml}.png"
+  if [[ -f "$img_file" && -n "$EOG_BIN" ]]; then
+    "$EOG_BIN" "$img_file" &
+  fi
+
+  append_log "plantuml" "$tmp_src" "$out_file" "$err_file" "$status"
+}
+
+
+run_current_block() {
+  print_separator
+  local info start_line end_line lang
+  if ! info="$(extract_block_and_lang)"; then
+    return
+  fi
+  start_line="$(printf '%s' "$info" | sed -n '1p')"
+  end_line="$(printf '%s' "$info" | sed -n '2p')"
+  lang="$(printf '%s' "$info" | sed -n '3p')"
+
+  case "$lang" in
+    python)
+      run_python_block "$start_line" "$end_line"
+      ;;
+    rust)
+      run_rust_block "$start_line" "$end_line"
+      ;;
+    zsh)
+      run_zsh_block "$start_line" "$end_line"
+      ;;
+    plantuml)
+      run_plantuml_block "$start_line" "$end_line"
+      ;;
+    *)
+      # linguagem não suportada: ignorar silenciosamente
+      ;;
+  esac
+}
+
+# Monitoramento
+if [[ -n "$INOTIFYWAIT_BIN" ]]; then
+  while "$INOTIFYWAIT_BIN" -q -e close_write "$TARGET_FILE" >/dev/null 2>&1; do
+    run_current_block
+  done
+else
+  if ! last_modified="$(stat -c %Y "$TARGET_FILE" 2>/dev/null)"; then
+    exit 1
+  fi
+  while true; do
+    current_modified="$(stat -c %Y "$TARGET_FILE" || echo 0)"
+    if [[ "$current_modified" != "$last_modified" ]]; then
+      last_modified="$current_modified"
+      clear
+      run_current_block
+    fi
+    sleep 1
+  done
+fi 
+
+
+# Adição da opção 'plantuml'
+if [ "$1" == "plantuml" ]; then
+  echo "Digite o código PlantUML (finalize com CTRL+D):"
+  cat > plantuml.txt
+  require_command "java" "$JAVA_BIN"
+  "$JAVA_BIN" -jar /usr/share/plantuml/plantuml.jar plantuml.txt
+  if [[ -n "$EOG_BIN" ]]; then
+    "$EOG_BIN" plantuml.png &
+  fi
+  exit 0
+fi

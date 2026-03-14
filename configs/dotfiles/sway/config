@@ -1,0 +1,239 @@
+# =============================================================================
+# Sway config — Setup Arch
+# =============================================================================
+
+# Mod key = Super (Windows key)
+set $mod Mod4
+
+# Terminals
+set $term kitty
+set $term_alt alacritty
+
+# Launcher
+set $menu wofi --show drun
+
+# Browser
+set $browser brave
+
+# ---------------------------------------------------------------------------
+# Appearance
+# ---------------------------------------------------------------------------
+
+# Font
+font pango:JetBrains Mono 10
+
+# Gaps
+gaps inner 5
+gaps outer 2
+
+# Borders
+default_border pixel 2
+default_floating_border pixel 2
+
+# Colors (simple dark theme)
+# class                 border  bg      text    indicator child_border
+client.focused          #6272a4 #6272a4 #f8f8f2 #6272a4   #6272a4
+client.focused_inactive #44475a #44475a #f8f8f2 #44475a   #44475a
+client.unfocused        #282a36 #282a36 #bfbfbf #282a36   #282a36
+client.urgent           #ff5555 #ff5555 #f8f8f2 #ff5555   #ff5555
+
+# ---------------------------------------------------------------------------
+# Output (monitor)
+# ---------------------------------------------------------------------------
+
+# Wallpaper (adjust path as needed)
+output * bg /usr/share/backgrounds/sway/Sway_Wallpaper_Blue_1920x1080.png fill
+
+# ---------------------------------------------------------------------------
+# Input (keyboard)
+# ---------------------------------------------------------------------------
+
+input type:keyboard {
+    xkb_layout br
+    xkb_variant abnt2
+}
+
+# Touchpad (laptop)
+input type:touchpad {
+    tap enabled
+    natural_scroll enabled
+    dwt enabled
+}
+
+# ---------------------------------------------------------------------------
+# Hotkeys — Applications
+# ---------------------------------------------------------------------------
+
+# Terminal
+bindsym $mod+Return exec $term
+bindsym $mod+Shift+Return exec $term_alt
+
+# Browser
+bindsym $mod+b exec $browser
+
+# Launcher
+bindsym $mod+d exec $menu
+
+# Close window
+bindsym $mod+q kill
+
+# Screenshot (area)
+bindsym Print exec grim -g "$(slurp)" - | wl-copy
+
+# Screenshot (fullscreen)
+bindsym $mod+Print exec grim - | wl-copy
+
+# ---------------------------------------------------------------------------
+# Hotkeys — Navigation (vim-style)
+# ---------------------------------------------------------------------------
+
+# Focus
+bindsym $mod+h focus left
+bindsym $mod+j focus down
+bindsym $mod+k focus up
+bindsym $mod+l focus right
+
+# Move window
+bindsym $mod+Shift+h move left
+bindsym $mod+Shift+j move down
+bindsym $mod+Shift+k move up
+bindsym $mod+Shift+l move right
+
+# Also with arrow keys
+bindsym $mod+Left  focus left
+bindsym $mod+Down  focus down
+bindsym $mod+Up    focus up
+bindsym $mod+Right focus right
+
+bindsym $mod+Shift+Left  move left
+bindsym $mod+Shift+Down  move down
+bindsym $mod+Shift+Up    move up
+bindsym $mod+Shift+Right move right
+
+# ---------------------------------------------------------------------------
+# Hotkeys — Layout
+# ---------------------------------------------------------------------------
+
+
+# Split
+bindsym $mod+g splith
+bindsym $mod+v splitv
+
+# Fullscreen
+bindsym $mod+f fullscreen
+
+# Floating
+bindsym $mod+Shift+space floating toggle
+bindsym $mod+space focus mode_toggle
+
+# Layout toggle
+bindsym $mod+p layout toggle split tabbed stacking
+
+# Resize mode
+mode "resize" {
+    bindsym h resize shrink width  20px
+    bindsym j resize grow   height 20px
+    bindsym k resize shrink height 20px
+    bindsym l resize grow   width  20px
+
+    bindsym Left  resize shrink width  20px
+    bindsym Down  resize grow   height 20px
+    bindsym Up    resize shrink height 20px
+    bindsym Right resize grow   width  20px
+
+    bindsym Return mode "default"
+    bindsym Escape mode "default"
+}
+bindsym $mod+r mode "resize"
+
+# ---------------------------------------------------------------------------
+# Workspaces
+# ---------------------------------------------------------------------------
+
+bindsym $mod+1 workspace number 1
+bindsym $mod+2 workspace number 2
+bindsym $mod+3 workspace number 3
+bindsym $mod+4 workspace number 4
+bindsym $mod+5 workspace number 5
+bindsym $mod+6 workspace number 6
+bindsym $mod+7 workspace number 7
+bindsym $mod+8 workspace number 8
+bindsym $mod+9 workspace number 9
+
+bindsym $mod+Shift+1 move container to workspace number 1
+bindsym $mod+Shift+2 move container to workspace number 2
+bindsym $mod+Shift+3 move container to workspace number 3
+bindsym $mod+Shift+4 move container to workspace number 4
+bindsym $mod+Shift+5 move container to workspace number 5
+bindsym $mod+Shift+6 move container to workspace number 6
+bindsym $mod+Shift+7 move container to workspace number 7
+bindsym $mod+Shift+8 move container to workspace number 8
+bindsym $mod+Shift+9 move container to workspace number 9
+
+# ---------------------------------------------------------------------------
+# Sway control
+# ---------------------------------------------------------------------------
+
+# Reload config
+bindsym $mod+Shift+c reload
+
+# Exit Sway
+bindsym $mod+Shift+e exec swaynag -t warning -m 'Exit Sway?' -B 'Yes' 'swaymsg exit'
+
+# Lock
+bindsym $mod+Escape exec swaylock -f -c 282a36
+
+# ---------------------------------------------------------------------------
+# Hardware keys (volume, brightness, media)
+# ---------------------------------------------------------------------------
+
+# Volume
+bindsym XF86AudioRaiseVolume exec wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
+bindsym XF86AudioLowerVolume exec wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+bindsym XF86AudioMute        exec wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+bindsym XF86AudioMicMute     exec wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle
+
+# Brightness
+bindsym XF86MonBrightnessUp   exec brightnessctl set 5%+
+bindsym XF86MonBrightnessDown exec brightnessctl set 5%-
+
+# Media
+bindsym XF86AudioPlay  exec playerctl play-pause
+bindsym XF86AudioNext  exec playerctl next
+bindsym XF86AudioPrev  exec playerctl previous
+
+# File manager
+bindsym $mod+e exec $term -e yazi
+
+# ---------------------------------------------------------------------------
+# Autostart
+# ---------------------------------------------------------------------------
+
+# Waybar
+exec waybar
+
+# Notifications
+exec mako
+
+# Idle + auto lock
+exec swayidle -w \
+    timeout 300 'swaylock -f -c 282a36' \
+    timeout 600 'swaymsg "output * power off"' \
+    resume 'swaymsg "output * power on"' \
+    before-sleep 'swaylock -f -c 282a36'
+
+# Kanshi (monitor profiles)
+exec kanshi
+
+# Polkit
+exec /usr/lib/polkit-kde-authentication-agent-1
+
+# Portal XDG
+exec dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway
+
+# NVIDIA vars
+exec_always {
+    export WLR_NO_HARDWARE_CURSORS=1
+}
+
+include /etc/sway/config.d/*

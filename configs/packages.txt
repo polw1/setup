@@ -1,0 +1,90 @@
+# Terminals and editor
+alacritty
+kitty
+neovim
+
+# Base utilities
+git
+curl
+wget
+zip
+unzip
+ripgrep
+fd
+jq
+htop
+btop
+tmux
+zsh
+xdg-user-dirs
+man-db
+zram-generator
+rsync
+
+# File manager
+yazi
+ffmpegthumbnailer
+poppler
+
+# Fonts
+ttf-jetbrains-mono-nerd
+otf-font-awesome
+noto-fonts
+noto-fonts-emoji
+
+# Build/dev
+base-devel
+gcc
+clang
+cmake
+ninja
+make
+rustup
+python
+python-pip
+jdk-openjdk
+nodejs
+npm
+
+# Browsers (official repo)
+firefox
+chromium
+
+# Docker
+docker
+docker-compose
+
+# NVIDIA (hybrid laptop AMD + NVIDIA)
+nvidia-open
+nvidia-utils
+nvidia-settings
+lib32-nvidia-utils
+
+# Wayland desktop stack (Sway)
+sway
+waybar
+wofi
+mako
+swaybg
+grim
+slurp
+wl-clipboard
+kanshi
+swayidle
+swaylock
+xdg-desktop-portal-wlr
+polkit-kde-agent
+
+# Audio / session
+pipewire
+pipewire-alsa
+pipewire-pulse
+wireplumber
+networkmanager
+bluez
+bluez-utils
+
+# Brightness / volume control
+brightnessctl
+pavucontrol
+playerctl

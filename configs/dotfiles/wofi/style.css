@@ -1,0 +1,29 @@
+/* Wofi — tema escuro */
+
+window {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 14px;
+    background-color: #282a36;
+    color: #f8f8f2;
+}
+
+#input {
+    margin: 5px;
+    padding: 8px;
+    background-color: #44475a;
+    color: #f8f8f2;
+    border: none;
+}
+
+#outer-box {
+    margin: 0;
+    padding: 0;
+}
+
+#entry {
+    padding: 8px;
+}
+
+#entry:selected {
+    background-color: #6272a4;
+}

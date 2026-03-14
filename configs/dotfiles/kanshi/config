@@ -1,0 +1,8 @@
+profile dual-monitor {
+    output HDMI-A-1 enable mode 3440x1440@60Hz position 0,0
+    output eDP-1 enable position 0,1440
+}
+
+profile laptop-only {
+    output eDP-1 enable position 0,0
+}

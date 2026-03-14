@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# =============================================================================
+# update-all — Update system, AUR, Rust, and Flatpak in one command
+# =============================================================================
+
+GREEN='\e[32m'
+YELLOW='\e[33m'
+RESET='\e[0m'
+
+log()  { echo -e "${GREEN}[update-all]${RESET} $*"; }
+warn() { echo -e "${YELLOW}[update-all]${RESET} $*"; }
+
+log "=== Full System Update ==="
+
+# Official packages
+log "Updating official packages..."
+sudo pacman -Syu --noconfirm
+
+# AUR packages
+if command -v yay &>/dev/null; then
+  log "Updating AUR packages..."
+  yay -Sua --noconfirm
+else
+  warn "yay not found, skipping AUR."
+fi
+
+# Rust toolchain
+if command -v rustup &>/dev/null; then
+  log "Updating Rust toolchain..."
+  rustup update
+fi
+
+# Flatpak (if installed)
+if command -v flatpak &>/dev/null; then
+  log "Updating Flatpak apps..."
+  flatpak update -y
+fi
+
+# npm global packages
+if command -v npm &>/dev/null; then
+  log "Updating npm global packages..."
+  npm update -g 2>/dev/null || true
+fi
+
+log "=== Update complete! ==="
