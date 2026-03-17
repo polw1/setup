@@ -79,6 +79,8 @@ bindsym $mod+q kill
 
 # Screenshot (area)
 bindsym Print exec grim -g "$(slurp)" - | wl-copy
+# Screenshot (area) save to file and copy to clipboard
+bindsym $mod+s exec mkdir -p ~/Pictures/Screenshots && grim -g "$(slurp)" - | tee ~/Pictures/Screenshots/$(date +'%Y-%m-%d-%H%M%S_grim.png') | wl-copy
 
 # Screenshot (fullscreen)
 bindsym $mod+Print exec grim - | wl-copy
