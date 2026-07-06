@@ -58,6 +58,12 @@ keymap.set("n", "-", "<cmd>Oil<CR>", { desc = "Abrir diretório pai" })
 -- Neogit
 keymap.set("n", "<leader>gg", "<cmd>Neogit<CR>", { desc = "Abrir Neogit" })
 
+-- Compiler Explorer
+keymap.set("n", "<leader>ce", "<cmd>CECompile<CR>", { desc = "Ver assembly do arquivo" })
+keymap.set("v", "<leader>ce", ":CECompile<CR>", { desc = "Ver assembly da seleção" })
+keymap.set("n", "<leader>cl", "<cmd>CECompileLive<CR>", { desc = "Assembly em tempo real" })
+keymap.set("n", "<leader>ct", "<cmd>CEShowTooltip<CR>", { desc = "Info da instrução no assembly" })
+
 -- comando :Ff (acessível também como :ff) para abrir Telescope find_files
 vim.api.nvim_create_user_command("Ff", function()
   vim.cmd "Telescope find_files"
@@ -125,6 +131,39 @@ vim.api.nvim_create_user_command("Setcwd", function()
 end, { desc = "Definir cwd como diretório atual" })
 
 vim.cmd "cnoreabbrev setcwd Setcwd"
+
+-- comando :Tsend <bufnr> <comando> para enviar comando para um terminal específico
+vim.api.nvim_create_user_command("Tsend", function(opts)
+  local args = vim.split(opts.args, " ", { plain = true, trimempty = true })
+  if #args < 2 then
+    print "Uso: :Tsend <bufnr> <comando>"
+    return
+  end
+
+  local bufnr = tonumber(args[1])
+  if not bufnr then
+    print "Número de buffer inválido"
+    return
+  end
+
+  if not vim.api.nvim_buf_is_valid(bufnr) or vim.bo[bufnr].buftype ~= "terminal" then
+    print("Buffer " .. bufnr .. " não é um terminal válido")
+    return
+  end
+
+  local job_id = vim.b[bufnr].terminal_job_id
+  if not job_id then
+    print "Terminal não encontrado no buffer"
+    return
+  end
+
+  local cmd = table.concat({ unpack(args, 2) }, " ")
+  cmd = cmd:gsub("%%", vim.fn.expand "%")
+
+  vim.fn.chansend(job_id, cmd .. "\n")
+end, { nargs = "+", desc = "Enviar comando para terminal específico" })
+
+vim.cmd "cnoreabbrev ts Tsend"
 
 -- comando :T para abrir terminal no diretório atual (oil, arquivo, ou cwd)
 vim.api.nvim_create_user_command("T", function()
