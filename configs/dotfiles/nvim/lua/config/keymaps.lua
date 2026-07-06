@@ -65,12 +65,35 @@ end, { desc = "Buscar arquivos com Telescope" })
 
 vim.cmd "cnoreabbrev ff Ff"
 
--- comando :Fd (acessível também como :fd) para abrir Telescope file_browser
+-- comando :Fd (acessível também como :fd) para buscar pastas recursivamente
 vim.api.nvim_create_user_command("Fd", function()
-  vim.cmd "Telescope file_browser"
-end, { desc = "Buscar diretórios com Telescope" })
+  local actions = require "telescope.actions"
+  local action_state = require "telescope.actions.state"
+
+  require("telescope.builtin").find_files {
+    prompt_title = "Buscar pastas",
+    find_command = { "fd", "--type", "directory", "--hidden", "--exclude", ".git" },
+    attach_mappings = function(prompt_bufnr, map)
+      actions.select_default:replace(function()
+        local selection = action_state.get_selected_entry()
+        actions.close(prompt_bufnr)
+        if selection then
+          require("oil").open(selection.path or selection.value)
+        end
+      end)
+      return true
+    end,
+  }
+end, { desc = "Buscar pastas recursivamente com Telescope" })
 
 vim.cmd "cnoreabbrev fd Fd"
+
+-- comando :Fdd (acessível também como :fdd) para navegar só por diretórios
+vim.api.nvim_create_user_command("Fdd", function()
+  vim.cmd "Telescope file_browser"
+end, { desc = "Navegar diretórios com Telescope" })
+
+vim.cmd "cnoreabbrev fdd Fdd"
 
 -- comando :Fdev (acessível também como :fdev) para abrir file_browser em ~/dev
 vim.api.nvim_create_user_command("Fdev", function()
@@ -85,6 +108,41 @@ vim.api.nvim_create_user_command("Fb", function()
 end, { desc = "Buscar buffers com Telescope" })
 
 vim.cmd "cnoreabbrev fb Fb"
+
+-- comando :Setcwd para definir o cwd como a pasta atual do oil
+vim.api.nvim_create_user_command("Setcwd", function()
+  if vim.bo.filetype == "oil" then
+    local dir = require("oil").get_current_dir()
+    if dir then
+      vim.api.nvim_set_current_dir(dir)
+      print("Cwd alterado para: " .. dir)
+    end
+  else
+    local dir = vim.fn.expand "%:p:h"
+    vim.api.nvim_set_current_dir(dir)
+    print("Cwd alterado para: " .. dir)
+  end
+end, { desc = "Definir cwd como diretório atual" })
+
+vim.cmd "cnoreabbrev setcwd Setcwd"
+
+-- comando :T para abrir terminal no diretório atual (oil, arquivo, ou cwd)
+vim.api.nvim_create_user_command("T", function()
+  local cwd
+  if vim.bo.filetype == "oil" then
+    cwd = require("oil").get_current_dir()
+  elseif vim.fn.expand("%:p") ~= "" then
+    cwd = vim.fn.expand("%:p:h")
+  else
+    cwd = vim.fn.getcwd()
+  end
+
+  vim.cmd "split"
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_win_set_buf(0, buf)
+  vim.fn.termopen(vim.o.shell, { cwd = cwd })
+  vim.cmd "startinsert"
+end, { desc = "Abrir terminal no diretório atual" })
 
 -- comando :Fg (acessível também como :fg) para abrir Telescope live_grep
 vim.api.nvim_create_user_command("Fg", function()
