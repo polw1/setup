@@ -211,3 +211,24 @@ end, { desc = "Deletar todos os buffers menos o atual (forçado)" })
 
 keymap.set("n", "<leader>bo", "<cmd>Bonly<CR>", { desc = "Manter só o buffer atual" })
 keymap.set("n", "<leader>bO", "<cmd>BonlyF<CR>", { desc = "Manter só o buffer atual (forçado)" })
+
+-- :q protegido contra terminais ativos
+vim.api.nvim_create_user_command("Q", function(opts)
+  if opts.bang then
+    vim.cmd "q!"
+    return
+  end
+
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.bo[buf].buftype == "terminal" then
+      vim.notify("Tem terminal ativo, feche com q!", vim.log.levels.WARN)
+      return
+    end
+  end
+
+  vim.cmd "q"
+end, { bang = true })
+
+-- redireciona :q para :Q (protegido contra terminais)
+-- :q! continua forçando a saída normalmente
+vim.cmd [[cabbrev <expr> q getcmdtype() ==# ":" && getcmdline() ==# "q" ? "Q" : "q"]]
